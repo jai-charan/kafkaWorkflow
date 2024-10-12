@@ -9,6 +9,14 @@ import (
 	"money-transfer-project-template-go/app"
 )
 
+// WHAT ARE WE GOING TO WORK ON
+// 1-> CREATE A WORKFLOW "GET DEVICE DETAILS"
+// 2-> THE WORKFLOW HAS 3 ACTIVITY INSIDE
+//  2.1->FETCH DEVICE DETAILS FROM API
+//  2.2->PUBLISH THE DEVICE DATA TO KAFKA TOPIC
+//  2.3->CONSUME DEVICE DETAILS FROM KAFKA
+
+
 // @@@SNIPSTART money-transfer-project-template-go-start-workflow
 func main() {
 	// Create the client object just once per process
