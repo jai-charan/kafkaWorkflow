@@ -2,53 +2,135 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/IBM/sarama"
 )
 
-// @@@SNIPSTART money-transfer-project-template-go-activity-withdraw
-func Withdraw(ctx context.Context, data PaymentDetails) (string, error) {
-	log.Printf("Withdrawing $%d from account %s.\n\n",
-		data.Amount,
-		data.SourceAccount,
-	)
+func ConsumeKafkaMessage(ctx context.Context, topic string) (string, error) {
+	log.Printf("Inside ConsumeKafkaMessage to consume message")
 
-	referenceID := fmt.Sprintf("%s-withdrawal", data.ReferenceID)
-	bank := BankingService{"bank-api.example.com"}
-	confirmation, err := bank.Withdraw(data.SourceAccount, data.Amount, referenceID)
-	return confirmation, err
+	consumer, err := sarama.NewConsumer([]string{"localhost:9092"}, nil)
+	if err != nil {
+		return "", err
+	}
+	defer consumer.Close()
+
+	partitions, err := consumer.Partitions(topic)
+	if err != nil {
+		return "", err
+	}
+
+	if len(partitions) == 0 {
+		return "", nil
+	}
+	partitionConsumer, err := consumer.ConsumePartition(topic, partitions[0], sarama.OffsetNewest)
+	if err != nil {
+		return "", err
+	}
+	defer partitionConsumer.Close()
+
+	log.Printf("Waiting for a message on topic %s", topic)
+
+	select {
+	case msg := <-partitionConsumer.Messages():
+		log.Printf("Consumed message is %v", string(msg.Value))
+		return string(msg.Value), nil
+	case <-time.After(20 * time.Second):
+		log.Print("Timeout...No messages consumed")
+		return "", nil
+	case <-ctx.Done():
+		log.Printf("Context done, stopping consumer")
+		return "", nil
+	}
 }
 
-// @@@SNIPEND
+func FetchData(ctx context.Context, kakfaMessage string) (ProductData, error) {
+	log.Printf("Inside FetchData to make API call To get device details")
+	var objectDetails ApiResponse
+	var responseObject ProductData
 
-// @@@SNIPSTART money-transfer-project-template-go-activity-deposit
-func Deposit(ctx context.Context, data PaymentDetails) (string, error) {
-	log.Printf("Depositing $%d into account %s.\n\n",
-		data.Amount,
-		data.TargetAccount,
-	)
+	randomInt := rand.Intn(9) + 1
+	url := fmt.Sprintf("https://api.restful-api.dev/objects/%d", randomInt)
 
-	referenceID := fmt.Sprintf("%s-deposit", data.ReferenceID)
-	bank := BankingService{"bank-api.example.com"}
-	// Uncomment the next line and comment the one after that to simulate an unknown failure
-	// confirmation, err := bank.DepositThatFails(data.TargetAccount, data.Amount, referenceID)
-	confirmation, err := bank.Deposit(data.TargetAccount, data.Amount, referenceID)
-	return confirmation, err
+	resp, err := http.Get(url)
+
+	if err != nil {
+		return ProductData{}, err
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&objectDetails); err != nil {
+		return ProductData{}, err
+	}
+
+	id, err := strconv.Atoi(objectDetails.ID)
+	if err != nil {
+		return ProductData{}, err // Return an error if conversion fails
+	}
+	log.Print("Data Fetched Successfully")
+
+	responseObject.Id = id
+	responseObject.Name = objectDetails.Name
+	responseObject.Color = objectDetails.Data.Color
+
+	log.Print("Appending the Kafka Message to the responseObject")
+	responseObject.AdditionalData.KafkaMessage = kakfaMessage
+
+	log.Printf("Device No %v , %v is of Color %v", responseObject.Id, responseObject.Name, responseObject.Color)
+
+	return responseObject, nil
 }
 
-// @@@SNIPEND
+func PublishKafkaMessage(topic string, data ProductData) (string, error) {
 
-// @@@SNIPSTART money-transfer-project-template-go-activity-refund
-func Refund(ctx context.Context, data PaymentDetails) (string, error) {
-	log.Printf("Refunding $%v back into account %v.\n\n",
-		data.Amount,
-		data.SourceAccount,
-	)
+	log.Printf("Inside PublishKafkaMessage to make Publish Messageto Kafka Topic")
+	config := sarama.NewConfig()
+	config.Producer.Return.Successes = true // Enables success response from the producer
 
-	referenceID := fmt.Sprintf("%s-refund", data.ReferenceID)
-	bank := BankingService{"bank-api.example.com"}
-	confirmation, err := bank.Deposit(data.SourceAccount, data.Amount, referenceID)
-	return confirmation, err
+	producer, err := sarama.NewSyncProducer([]string{"localhost:9092"}, config)
+	if err != nil {
+		log.Fatalf("Error creating producer: %v", err)
+	}
+	defer func() {
+		if err := producer.Close(); err != nil {
+			log.Fatalf("Error closing producer: %v", err)
+		}
+	}()
+
+	publishMessage, err := messageBuilder(data)
+	if err != nil {
+		log.Fatalf("Error building message %v", err)
+
+	}
+
+	message := &sarama.ProducerMessage{
+		Topic: topic,
+		Value: sarama.StringEncoder(publishMessage),
+	}
+
+	partition, offset, err := producer.SendMessage(message)
+	if err != nil {
+		log.Fatalf("Error sending message: %v", err)
+		return "", err
+	}
+	fmt.Printf("The published message is %v", publishMessage)
+	fmt.Printf("Message sent to partition %d at offset %d\n", partition, offset)
+	return publishMessage, err
+}
+
+func messageBuilder(p ProductData) (string, error) {
+	message, err := json.Marshal(p)
+	if err != nil {
+		return "", err
+	}
+
+	return string(message), nil
 }
 
 // @@@SNIPEND

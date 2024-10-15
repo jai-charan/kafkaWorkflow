@@ -9,7 +9,7 @@ import (
 )
 
 // @@@SNIPSTART money-transfer-project-template-go-workflow
-func MoneyTransfer(ctx workflow.Context, input PaymentDetails) (string, error) {
+func KafkaWorkflow(ctx workflow.Context) (string, error) {
 
 	// RetryPolicy specifies how to automatically handle retries if an Activity fails.
 	retrypolicy := &temporal.RetryPolicy{
@@ -31,39 +31,32 @@ func MoneyTransfer(ctx workflow.Context, input PaymentDetails) (string, error) {
 	// Apply the options.
 	ctx = workflow.WithActivityOptions(ctx, options)
 
-	// Withdraw money.
-	var withdrawOutput string
-
-	withdrawErr := workflow.ExecuteActivity(ctx, Withdraw, input).Get(ctx, &withdrawOutput)
-
-	if withdrawErr != nil {
-		return "", withdrawErr
+	//Listen to Kafka Topic
+	var kafkaMessage string
+	var topic = "gadget"
+	kafkaMessageErr := workflow.ExecuteActivity(ctx, ConsumeKafkaMessage, topic).Get(ctx, &kafkaMessage)
+	if kafkaMessageErr != nil {
+		return "", kafkaMessageErr
 	}
 
-	// Deposit money.
-	var depositOutput string
+	// Fetch Device data
+	var dataOutput ProductData
 
-	depositErr := workflow.ExecuteActivity(ctx, Deposit, input).Get(ctx, &depositOutput)
-
-	if depositErr != nil {
-		// The deposit failed; put money back in original account.
-
-		var result string
-
-		refundErr := workflow.ExecuteActivity(ctx, Refund, input).Get(ctx, &result)
-
-		if refundErr != nil {
-			return "",
-				fmt.Errorf("Deposit: failed to deposit money into %v: %v. Money could not be returned to %v: %w",
-					input.TargetAccount, depositErr, input.SourceAccount, refundErr)
-		}
-
-		return "", fmt.Errorf("Deposit: failed to deposit money into %v: Money returned to %v: %w",
-			input.TargetAccount, input.SourceAccount, depositErr)
+	fetchDataErr := workflow.ExecuteActivity(ctx, FetchData, kafkaMessage).Get(ctx, &dataOutput)
+	if fetchDataErr != nil {
+		return "", fetchDataErr
 	}
 
-	result := fmt.Sprintf("Transfer complete (transaction IDs: %s, %s)", withdrawOutput, depositOutput)
+	//Publish the  Message to Kafka Topic
+	var publishedMessage string
+	PublishMessageErr := workflow.ExecuteActivity(ctx, PublishKafkaMessage, topic, dataOutput).Get(ctx, &publishedMessage)
+	if PublishMessageErr != nil {
+		return "", PublishMessageErr
+	}
+
+	result := fmt.Sprintf("Workflow Successfully completed and the message %v is published to Kafka topic", publishedMessage)
 	return result, nil
+
 }
 
 // @@@SNIPEND

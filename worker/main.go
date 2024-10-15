@@ -18,13 +18,14 @@ func main() {
 	}
 	defer c.Close()
 
-	w := worker.New(c, app.MoneyTransferTaskQueueName, worker.Options{})
+	w := worker.New(c, app.KafkaWorkflowTaskQueueName, worker.Options{})
 
 	// This worker hosts both Workflow and Activity functions.
-	w.RegisterWorkflow(app.MoneyTransfer)
-	w.RegisterActivity(app.Withdraw)
-	w.RegisterActivity(app.Deposit)
-	w.RegisterActivity(app.Refund)
+	w.RegisterWorkflow(app.KafkaWorkflow)
+
+	w.RegisterActivity(app.ConsumeKafkaMessage)
+	w.RegisterActivity(app.FetchData)
+	w.RegisterActivity(app.PublishKafkaMessage)
 
 	// Start listening to the Task Queue.
 	err = w.Run(worker.InterruptCh())

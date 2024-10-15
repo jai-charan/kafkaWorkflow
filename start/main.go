@@ -16,7 +16,6 @@ import (
 //  2.2->PUBLISH THE DEVICE DATA TO KAFKA TOPIC
 //  2.3->CONSUME DEVICE DETAILS FROM KAFKA
 
-
 // @@@SNIPSTART money-transfer-project-template-go-start-workflow
 func main() {
 	// Create the client object just once per process
@@ -28,21 +27,14 @@ func main() {
 
 	defer c.Close()
 
-	input := app.PaymentDetails{
-		SourceAccount: "85-150",
-		TargetAccount: "43-812",
-		Amount:        250,
-		ReferenceID:   "12345",
-	}
-
 	options := client.StartWorkflowOptions{
-		ID:        "pay-invoice-701",
-		TaskQueue: app.MoneyTransferTaskQueueName,
+		ID:        "kafka-workflow-001",
+		TaskQueue: app.KafkaWorkflowTaskQueueName,
 	}
 
-	log.Printf("Starting transfer from account %s to account %s for %d", input.SourceAccount, input.TargetAccount, input.Amount)
+	log.Printf("Starting Kafka Workflow to consume message, make a API call and Publish the message to kafka topic")
 
-	we, err := c.ExecuteWorkflow(context.Background(), options, app.MoneyTransfer, input)
+	we, err := c.ExecuteWorkflow(context.Background(), options, app.KafkaWorkflow)
 	if err != nil {
 		log.Fatalln("Unable to start the Workflow:", err)
 	}

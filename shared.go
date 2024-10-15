@@ -1,16 +1,21 @@
 package app
 
-// @@@SNIPSTART money-transfer-project-template-go-shared-task-queue
-const MoneyTransferTaskQueueName = "TRANSFER_MONEY_TASK_QUEUE"
+const KafkaWorkflowTaskQueueName = "KAFKA_WORKFLOW_TASK_QUEUE"
 
-// @@@SNIPEND
-
-// @@@SNIPSTART money-transfer-project-template-go-transferdetails
-type PaymentDetails struct {
-	SourceAccount string
-	TargetAccount string
-	Amount        int
-	ReferenceID   string
+type ProductData struct {
+	Id             int
+	Name           string
+	Color          string
+	AdditionalData struct {
+		KafkaMessage string
+	}
 }
 
-// @@@SNIPEND
+type ApiResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Data struct {
+		Color    string `json:"color"`
+		Capacity string `json:"capacity"`
+	} `json:"data"`
+}
